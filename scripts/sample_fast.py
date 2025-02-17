@@ -7,9 +7,13 @@ from PIL import Image
 from tqdm import tqdm, trange
 from einops import repeat
 
-from main import instantiate_from_config
+#from main import instantiate_from_config
 from taming.modules.transformer.mingpt import sample_with_past
 
+def instantiate_from_config(config):
+    if not "target" in config:
+        raise KeyError("Expected key `target` to instantiate.")
+    return get_obj_from_str(config["target"])(**config.get("params", dict()))
 
 rescale = lambda x: (x + 1.) / 2.
 
