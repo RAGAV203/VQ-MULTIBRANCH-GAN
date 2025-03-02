@@ -433,6 +433,33 @@ class Encoder(nn.Module):
         h = self.conv_out(h)
         return h
 
+class Swish(nn.Module):
+    def forward(self, x):
+        return x * torch.sigmoid(x)
+    
+class MultiStageDecoder(nn.Module):
+    def __init__(self, in_channels, out_channels, num_branches=3):
+        super().__init__()
+        
+        self.branches = nn.ModuleList([
+            nn.Sequential(
+                nn.Conv2d(in_channels, out_channels, kernel_size=3+2*i, 
+                         stride=1, padding=(3+2*i)//2),
+                Normalize(out_channels),
+                Swish(),
+                nn.Conv2d(out_channels, out_channels, kernel_size=3+2*i,
+                         stride=1, padding=(3+2*i)//2),
+                Normalize(out_channels)
+            ) for i in range(num_branches)
+        ])
+        
+        # Final fusion layer
+        self.fusion = nn.Conv2d(out_channels * num_branches, out_channels, 1, 1, 0)
+        
+    def forward(self, x):
+        branch_outputs = [branch(x) for branch in self.branches]
+        combined = torch.cat(branch_outputs, dim=1)
+        return self.fusion(combined)
 
 class Decoder(nn.Module):
     def __init__(self, *, ch, out_ch, ch_mult=(1,2,4,8), num_res_blocks,
@@ -457,22 +484,22 @@ class Decoder(nn.Module):
 
         # z to block_in
         self.conv_in = torch.nn.Conv2d(z_channels,
-                                       block_in,
-                                       kernel_size=3,
-                                       stride=1,
-                                       padding=1)
+                                      block_in,
+                                      kernel_size=3,
+                                      stride=1,
+                                      padding=1)
 
         # middle
         self.mid = nn.Module()
         self.mid.block_1 = ResnetBlock(in_channels=block_in,
-                                       out_channels=block_in,
-                                       temb_channels=self.temb_ch,
-                                       dropout=dropout)
+                                      out_channels=block_in,
+                                      temb_channels=self.temb_ch,
+                                      dropout=dropout)
         self.mid.attn_1 = AttnBlock(block_in)
         self.mid.block_2 = ResnetBlock(in_channels=block_in,
-                                       out_channels=block_in,
-                                       temb_channels=self.temb_ch,
-                                       dropout=dropout)
+                                      out_channels=block_in,
+                                      temb_channels=self.temb_ch,
+                                      dropout=dropout)
 
         # upsampling
         self.up = nn.ModuleList()
@@ -482,9 +509,9 @@ class Decoder(nn.Module):
             block_out = ch*ch_mult[i_level]
             for i_block in range(self.num_res_blocks+1):
                 block.append(ResnetBlock(in_channels=block_in,
-                                         out_channels=block_out,
-                                         temb_channels=self.temb_ch,
-                                         dropout=dropout))
+                                       out_channels=block_out,
+                                       temb_channels=self.temb_ch,
+                                       dropout=dropout))
                 block_in = block_out
                 if curr_res in attn_resolutions:
                     attn.append(AttnBlock(block_in))
@@ -498,11 +525,12 @@ class Decoder(nn.Module):
 
         # end
         self.norm_out = Normalize(block_in)
-        self.conv_out = torch.nn.Conv2d(block_in,
-                                        out_ch,
-                                        kernel_size=3,
-                                        stride=1,
-                                        padding=1)
+        # Replace conventional conv_out with MultiStageDecoder
+        self.multi_stage_out = MultiStageDecoder(
+            in_channels=block_in,
+            out_channels=out_ch,
+            num_branches=3
+        )
 
     def forward(self, z):
         #assert z.shape[1:] == self.z_shape[1:]
@@ -534,7 +562,8 @@ class Decoder(nn.Module):
 
         h = self.norm_out(h)
         h = nonlinearity(h)
-        h = self.conv_out(h)
+        # Use multi-stage decoder instead of conv_out
+        h = self.multi_stage_out(h)
         return h
 
 
