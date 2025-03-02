@@ -536,39 +536,41 @@ class Decoder(nn.Module):
             out_channels=out_ch,
             num_branches=3
         )
+        # Add an alias for conv_out to maintain compatibility with existing code
+        self.conv_out = self.multi_stage_out.fusion
 
     def forward(self, z):
-        #assert z.shape[1:] == self.z_shape[1:]
+        # Optionally: assert z.shape[1:] == self.z_shape[1:]
         self.last_z_shape = z.shape
 
-        # timestep embedding
+        # Timestep embedding (if applicable)
         temb = None
 
-        # z to block_in
+        # z to block_in conversion
         h = self.conv_in(z)
 
-        # middle
+        # Middle layers
         h = self.mid.block_1(h, temb)
         h = self.mid.attn_1(h)
         h = self.mid.block_2(h, temb)
 
-        # upsampling
+        # Upsampling
         for i_level in reversed(range(self.num_resolutions)):
-            for i_block in range(self.num_res_blocks+1):
+            for i_block in range(self.num_res_blocks + 1):
                 h = self.up[i_level].block[i_block](h, temb)
                 if len(self.up[i_level].attn) > 0:
                     h = self.up[i_level].attn[i_block](h)
             if i_level != 0:
                 h = self.up[i_level].upsample(h)
 
-        # end
+        # End processing
         if self.give_pre_end:
             return h
 
         h = self.norm_out(h)
         h = nonlinearity(h)
-        # Use multi-stage decoder instead of conv_out
-        h = self.conv_out(h)
+        # Use multi-stage decoder instead of conventional conv_out
+        h = self.multi_stage_out(h)
         return h
 
 
