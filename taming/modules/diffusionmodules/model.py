@@ -531,7 +531,7 @@ class Decoder(nn.Module):
         # end
         self.norm_out = Normalizer(block_in)
         # Replace conventional conv_out with MultiStageDecoder
-        self.multi_stage_out = MultiStageDecoder(
+        self.conv_out = MultiStageDecoder(
             in_channels=block_in,
             out_channels=out_ch,
             num_branches=3
