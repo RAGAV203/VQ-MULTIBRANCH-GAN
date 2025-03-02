@@ -568,7 +568,7 @@ class Decoder(nn.Module):
         h = self.norm_out(h)
         h = nonlinearity(h)
         # Use multi-stage decoder instead of conv_out
-        h = self.multi_stage_out(h)
+        h = self.conv_outt(h)
         return h
 
 
