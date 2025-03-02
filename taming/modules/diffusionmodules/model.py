@@ -34,6 +34,11 @@ def nonlinearity(x):
 def Normalize(in_channels):
     return torch.nn.GroupNorm(num_groups=32, num_channels=in_channels, eps=1e-6, affine=True)
 
+def Normalizer(in_channels, num_groups=None):
+    if num_groups is None:
+        num_groups = min(32, in_channels)  # Use all channels if in_channels < 32
+    return torch.nn.GroupNorm(num_groups=num_groups, num_channels=in_channels, eps=1e-6, affine=True)
+
 
 class Upsample(nn.Module):
     def __init__(self, in_channels, with_conv):
@@ -445,11 +450,11 @@ class MultiStageDecoder(nn.Module):
             nn.Sequential(
                 nn.Conv2d(in_channels, out_channels, kernel_size=3+2*i, 
                          stride=1, padding=(3+2*i)//2),
-                Normalize(out_channels),
+                Normalizer(out_channels),
                 Swish(),
                 nn.Conv2d(out_channels, out_channels, kernel_size=3+2*i,
                          stride=1, padding=(3+2*i)//2),
-                Normalize(out_channels)
+                Normalizer(out_channels)
             ) for i in range(num_branches)
         ])
         
@@ -524,7 +529,7 @@ class Decoder(nn.Module):
             self.up.insert(0, up) # prepend to get consistent order
 
         # end
-        self.norm_out = Normalize(block_in)
+        self.norm_out = Normalizer(block_in)
         # Replace conventional conv_out with MultiStageDecoder
         self.multi_stage_out = MultiStageDecoder(
             in_channels=block_in,
